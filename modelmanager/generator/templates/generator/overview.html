@@ -1,0 +1,39 @@
+{% extends 'common/base.html' %}
+
+{% load i18n %}
+
+{% block title %}
+  {% trans "Overview" %}
+{% endblock %}
+
+{% block pagetitle %}
+  {% trans "Overview" %}
+{% endblock %}
+
+{% block head %}
+<style>
+.table-actions {
+  padding-bottom: 20px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="col-xs-12">
+{% if user.is_authenticated %}
+  <div class="table-actions text-right">
+    <div class="btn-group btn-group-sm">
+      <a href="{% url 'generator:generate' %}" class="btn btn-primary">{% trans "Generate Metadata" %}</a>
+    </div>
+  </div>
+{% else %}
+  <div class="col-xs-6 col-xs-offset-3">
+    <div class="well">
+      <p class="text-center">Log in to see your generator.</p>
+    </div>
+  </div>
+{% endif %}
+</div>
+
+{% endblock %}
+

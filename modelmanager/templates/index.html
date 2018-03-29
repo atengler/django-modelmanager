@@ -1,0 +1,99 @@
+{% extends 'common/base.html' %}
+
+{% load i18n %}
+
+{% block title %}
+  {% trans "Home" %}
+{% endblock %}
+
+{% block pagetitle %}
+  {% trans "Welcome!" %}
+{% endblock %}
+
+{% block head %}
+<style>
+.gallery {
+  margin: 0 auto;
+  padding: 5px;
+  background: #4e5d6c;
+  box-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+
+.gallery > div {
+  position: relative;
+  float: left;
+  padding: 13px;
+}
+
+.gallery > div > a > img {
+  display: block;
+  width: 200px;
+  transition: .1s transform;
+  transform: translateZ(0); /* hack */
+}
+
+.gallery > div:hover {
+  z-index: 1;
+}
+
+.gallery > div:hover > a:not(.disabled) > img {
+  transform: scale(1.2,1.2);
+  transition: .3s transform;
+}
+
+.gallery > div > a.disabled > img {
+  -webkit-filter: grayscale(100%); /* Safari 6.0 - 9.0 */
+  filter: grayscale(100%);
+}
+
+.cf:before, .cf:after {
+  display: table;
+  content: "";
+  line-height: 0;
+}
+
+.cf:after {
+  clear: both;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% if request.user.is_authenticated %}
+<div class="col-xs-12">
+  <div class="gallery cf">
+    <div>
+      <a href="{% url 'generator:overview' %}">
+        <img src="https://vexxhost.com/file/2016/02/Database-Cloud-256.png" />
+      </a>
+    </div>
+    <div>
+      <a class="disabled" href="#">
+        <img src="https://vexxhost.com/file/2016/02/Database-Cloud-256.png" />
+      </a>
+    </div>
+    <div>
+      <a class="disabled" href="#">
+        <img src="https://vexxhost.com/file/2016/02/Database-Cloud-256.png" />
+      </a>
+    </div>
+    <div>
+      <a class="disabled" href="#">
+        <img src="https://vexxhost.com/file/2016/02/Database-Cloud-256.png" />
+      </a>
+    </div>
+    <div>
+      <a class="disabled" href="#">
+        <img src="https://vexxhost.com/file/2016/02/Database-Cloud-256.png" />
+      </a>
+    </div>
+  </div>
+{% else %}
+<div class="col-xs-6 col-xs-offset-3">
+  <div class="well">
+    <p class="text-center">Click <a href="{% url 'identity:login' %}">here</a> to login.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+

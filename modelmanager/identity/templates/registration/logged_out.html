@@ -1,0 +1,23 @@
+{% extends "common/base.html" %}
+
+{% load i18n %}
+
+{% block title %}
+  {% trans "Logout" %}
+{% endblock %}
+
+{% block pagetitle %}
+  {% trans "Logout" %}
+{% endblock %}
+
+{% block content %}
+<div class="col-xs-6 col-xs-offset-3">
+  <div class="well well-success">
+    <p class="text-center">
+      {% trans "We logged you out!" %}<br>
+      <a href="{% url 'identity:login' %}">{% trans "Click here to login again." %}</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
+

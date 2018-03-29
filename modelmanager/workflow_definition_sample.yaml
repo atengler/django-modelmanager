@@ -1,0 +1,2494 @@
+{% set private_key_cicd, public_key_cicd = generate_ssh_keypair(context_seed + '_cicd') %} {% set private_key_backup, public_key_backup = generate_ssh_keypair(context_seed + '_backup') %} {% set private_key_rundeck, public_key_rundeck = generate_ssh_keypair(context_seed + '_rundeck') %}
+general_params_action:
+  - name: "base"
+    label: "Base"
+    doc: |
+      Base
+      ====
+
+      This section covers basic deployment parameters. Supported deployment type is currently Physical for OpenStack. Kubernetes works with both Physical and Heat.
+
+    fields:
+      - initial: "{{ 64|generate_password }}"
+        name: context_seed
+        type: TEXT
+        hidden: True
+      - name: "cluster_name"
+        type: "TEXT"
+        help_text: "Name of the cluster, used as cluster/<cluster_name>/ in directory structure."
+        initial: "deployment_name"
+        width: half
+      - name: "cluster_domain"
+        type: "TEXT"
+        help_text: "Domain name part of FQDN of cluster in the cluster."
+        initial: "deploy-name.local"
+        width: half
+      - name: "public_host"
+        type: "TEXT"
+        help_text: "Name or IP of public endpoint of the deployment."
+        initial: "${_param:openstack_proxy_address}"
+      - name: "reclass_repository"
+        type: "TEXT"
+        help_text: "URL from which salt master will fetch reclass metadata repository."
+        initial: "https://github.com/Mirantis/mk-lab-salt-model.git"
+      - name: "mcp_version"
+        type: "CHOICE"
+        initial: "stable"
+        choices:
+          - - "2018.1"
+            - "2018.1"
+          - - "2017.12"
+            - "2017.12"
+          - - "stable"
+            - "stable"
+          - - "testing"
+            - "testing"
+          - - "nightly"
+            - "nightly"
+      - name: "cookiecutter_template_url"
+        type: "TEXT"
+        initial: "https://gerrit.mcp.mirantis.net/mk/cookiecutter-templates.git"
+      - name: "cookiecutter_template_branch"
+        type: "TEXT"
+        help_text: "branch/tag/refspec of cookiecutter-templates repo to checkout. Format: master or 2018.1 or refs/changes/xx/xxxxx/x"
+        initial: ''
+        required: False
+      - name: "shared_reclass_url"
+        type: "TEXT"
+        initial: "https://gerrit.mcp.mirantis.net/salt-models/reclass-system.git"
+      - name: "shared_reclass_branch"
+        type: "TEXT"
+        help_text: "branch/tag/refspec of reclass-system repo to checkout. Format: master or 2018.1 or refs/changes/xx/xxxxx/x"
+        initial: ''
+        required: False
+      - name: "cookiecutter_template_credentials"
+        type: "TEXT"
+        initial: "gerrit"
+      - name: "deployment_type"
+        type: "CHOICE"
+        initial: "physical"
+        choices:
+          - - "heat"
+            - "Heat"
+          - - "physical"
+            - "Physical"
+      - name: "publication_method"
+        type: "CHOICE"
+        initial: "email"
+        choices:
+          - - "email"
+            - "Send to e-mail address"
+          - - "commit"
+            - "Commit to repository"
+
+  - name: "services"
+    label: "Services"
+    doc: |
+      Services
+      ========
+
+      Here you can choose for which platform you want to generate the model. You can choose eighter OpenStack or Kubernetes. OpenContrail enabled parameter is for network engine of chosen platform. Right now supported only with OpenStack. If not enabled, OpenStack will have ovs as network engine. Kubernetes goes with Calico. Both platforms can go with CI/CD and StackLight.
+    fields:
+      - name: "platform"
+        type: "CHOICE"
+        help_text: "Enable either OpenStack or Kubernetes product sub-cluster"
+        choices:
+          - - "openstack_enabled"
+            - "OpenStack"
+          - - "kubernetes_enabled"
+            - "Kubernetes"
+        initial: "openstack_enabled"
+        extend_context: True
+      - name: "opencontrail_enabled"
+        type: "BOOL"
+        help_text: "Enable OpenContrail sub-cluster"
+        initial: True
+        label: "OpenContrail enabled"
+      - name: "stacklight_enabled"
+        type: "BOOL"
+        help_text: "Enable StackLight sub-cluster"
+        initial: True
+        label: "StackLight enabled"
+      - name: "stacklight_version"
+        type: "CHOICE"
+        help_text: "Enable either Stacklight or Stacklight V2"
+        choices:
+          - - "2"
+            - "2"
+        initial: "2"
+      - name: "ceph_enabled"
+        type: "BOOL"
+        help_text: "Enable ceph sub-cluster"
+        initial: True
+        label: "Ceph enabled"
+      - name: "cicd_enabled"
+        type: "BOOL"
+        help_text: "Enable CI/CD sub-cluster"
+        initial: True
+        label: "CI/CD enabled"
+      - name: "oss_enabled"
+        type: "BOOL"
+        help_text: "Enable OSS sub-cluster"
+        initial: True
+        label: "OSS enabled"
+      - name: "bmk_enabled"
+        type: "BOOL"
+        help_text: "Enable benchmark node"
+        initial: False
+        label: "Benchmark node enabled"
+  - name: "networking"
+    label: "Networking"
+    doc: |
+      Networking
+      ==========
+
+      This section covers basic Networking setup. Cookiecutter handles generic setup that includes dedicated management interface and two interfaces for workload. These two interfaces are in bond and have tagged subinterfaces for Control plane (Control network/VLAN) and Data plane (Tenant network/VLAN) traffic. The pxe interface is not managed and it is leaved to default DHCP from installation. Control plane and Data plane has static assign. Setup for NFV scenarios is not covered and needs to be done manually.
+
+      .. figure:: https://github.com/mceloud/images/blob/master/cookiecutter%20-%20network.png?raw=true
+        :width: 80 %
+        :align: center
+        :alt: Network diagram
+
+    fields:
+      - name: "dns_server01"
+        type: "IP"
+        help_text: "IP address of dns01 server"
+        initial: "8.8.8.8"
+        label: "DNS Server 01"
+        width: half
+      - name: "dns_server02"
+        type: "IP"
+        help_text: "IP address of dns02 server"
+        initial: "8.8.4.4"
+        label: "DNS Server 02"
+        width: half
+      - name: "deploy_network_subnet"
+        type: IP
+        help_text: "IP address of deploy network with network mask"
+        initial: "10.0.0.0/24"
+        mask: True
+        width: half
+      - name: "deploy_network_gateway"
+        type: IP
+        help_text: "IP gateway address of deploy network"
+        initial: "10.0.0.1"
+        width: half
+      - initial: False
+        name: static_ips_on_deploy_network_enabled
+        label: "Static IPs on deploy network"
+        help_text: "Assign static IP addresses on deploy network"
+        type: BOOL
+      - initial: True
+        name: use_default_network_scheme
+        label: "Use default network scheme"
+        help_text: "Use default networking scheme for each component"
+        type: BOOL
+      - name: "control_network_subnet"
+        type: IP
+        help_text: "IP address of control network with network mask"
+        initial: "10.0.1.0/24"
+        mask: True
+      - name: "tenant_network_subnet"
+        type: IP
+        help_text: "IP address of tenant network with network mask"
+        initial: "10.0.2.0/24"
+        mask: True
+        width: half
+      - name: "tenant_network_gateway"
+        type: IP
+        help_text: "IP gateway address of tenant network"
+        initial: "10.0.2.1"
+        width: half
+      - name: "control_vlan"
+        type: TEXT
+        help_text: "Contrail plane vlan ID"
+        initial: "10"
+        label: "Control VLAN"
+        width: half
+      - name: "tenant_vlan"
+        type: TEXT
+        help_text: "Data plane vlan ID"
+        initial: "20"
+        label: "Tenant VLAN"
+        width: half
+      - initial: False
+        name: upstream_proxy_enabled
+        label: "Upstream proxy"
+        help_text: "Enable upstream proxy for MaaS and cicd services"
+        type: BOOL
+infra_params_action:
+  - name: "salt"
+    label: "Salt Master"
+    fields:
+      - name: "salt_master_address"
+        type: "IP"
+        help_text: "IP address of salt master on control network"
+        initial: "{{ control_network_subnet | subnet(15) }}"
+      - name: "salt_master_management_address"
+        type: "IP"
+        help_text: "IP address of salt master on management network"
+        initial: "{{ deploy_network_subnet | subnet(15) }}"
+      - name: "salt_master_hostname"
+        type: "TEXT"
+        help_text: "hostname of salt master"
+        initial: "cfg01"
+      - initial: "{{ 32|generate_password }}"
+        name: salt_api_password
+        type: TEXT
+        hidden: True
+  - name: "maas"
+    label: "Ubuntu MaaS"
+    requires:
+    - deployment_type: "physical"
+    fields:
+      - help_text: "Hostname of a MaaS node"
+        initial: "cfg01"
+        name: "maas_hostname"
+        type: "TEXT"
+      - help_text: "IP address of maas on deploy network"
+        initial: "{{ deploy_network_subnet | subnet(15) }}"
+        name: "maas_deploy_address"
+        type: "IP"
+      - help_text: "Address of upstream proxy"
+        initial: ""
+        name: "upstream_proxy_address"
+        type: "IP"
+        requires:
+        - upstream_proxy_enabled: True
+      - help_text: "Port of upstream proxy"
+        initial: ""
+        name: "upstream_proxy_port"
+        type: "TEXT"
+        requires:
+        - upstream_proxy_enabled: True
+      - initial: False
+        name: upstream_proxy_auth_enabled
+        label: "Authentication for upstream proxy"
+        help_text: "Enable upstream proxy authentication for MaaS and cicd services"
+        type: BOOL
+        requires:
+        - upstream_proxy_enabled: True
+  - name: "publication"
+    label: "Publication Options"
+    fields:
+      - name: "email_address"
+        type: "TEXT"
+        help_text: "Generated reclass model will be sent to this address."
+        requires:
+          - publication_method: "email"
+      - name: "reclass_model_url"
+        type: "TEXT"
+        initial: {{ reclass_repository }}
+        help_text: "Generated reclass model will be commited to this repo."
+        requires:
+          - publication_method: "commit"
+      - name: "reclass_model_branch"
+        type: "TEXT"
+        initial: "master"
+        help_text: "Generated reclass model will be commited to this branch."
+        requires:
+          - publication_method: "commit"
+      - name: "reclass_model_credentials"
+        type: "TEXT"
+        initial: github-credentials
+        help_text: "These credentials will be used to commit generated reclass."
+        requires:
+          - publication_method: "commit"
+  - name: "kubernetes_networking"
+    label: "Kubernetes Networking"
+    doc: |
+      Kubernetes Networking
+      =====================
+    requires:
+      - platform: "kubernetes_enabled"
+    fields:
+    - name: "kubernetes_network_opencontrail_enabled"
+      help_text: "Enable opencontrail CNI."
+      type: "BOOL"
+      initial: "True"
+      requires:
+        - opencontrail_enabled: True
+    - name: "kubernetes_network_calico_enabled"
+      help_text: "Enable Calico CNI."
+      type: "BOOL"
+      initial: "False"
+  - name: "openstack_cluster_size_section"
+    label: "OpenStack Cluster Size"
+    doc: |
+      OpenStack Cluster Size
+      ======================
+      The sizing of OpenStack Virtual Control Plane depends on anticipated
+      number of Compute nodes. Compact is up to 50; small is 50 to 100;
+      medium is 100 to 200 and large is 200 to 500.
+    requires:
+      - platform: "openstack_enabled"
+    fields:
+      - name: "openstack_cluster_size"
+        help_text: "Select desired size of OpenStack VCP"
+        type: "CHOICE"
+        initial: "compact"
+        choices:
+          - - "compact"
+            - "up to 50"
+          - - "small"
+            - "50 to 100"
+          - - "medium"
+            - "100 to 200"
+          - - "large"
+            - "200 to 500"
+  - name: "openstack_networking"
+    label: "OpenStack Networking"
+    doc: |
+      OpenStack Networking
+      ====================
+      NFV feature generation is experimental. nfv req enabled parameter is for enabling hugepages and cpu pinning without dpdk.
+    requires:
+      - platform: "openstack_enabled"
+    fields:
+      - name: "openstack_network_engine"
+        help_text: "enables opencontrail sub-cluster if 'opencontrail'. Possible options are ovs and opencontrail"
+        type: "TEXT"
+        initial: "opencontrail"
+        readonly: True
+        requires:
+          - opencontrail_enabled: True
+      - name: "openstack_network_engine"
+        help_text: "Possible options are ovs and opencontrail, this parameter is set automatically."
+        type: "TEXT"
+        initial: "ovs"
+        readonly: True
+        requires:
+          - opencontrail_enabled: False
+      - initial: vxlan
+        name: openstack_ovs_encapsulation_type
+        help_text: "Encapsulation type is either vlan or vxlan."
+        type: TEXT
+        requires:
+          - opencontrail_enabled: False
+      - name: openstack_neutron_l2gw
+        label: "OpenStack Neutron L2 Gateways enabled"
+        help_text: "enable L2 Gateways extension"
+        initial: False
+        type: BOOL
+        requires:
+          - openstack_ovs_encapsulation_type: vxlan
+      - name: ovsdb_server
+        help_text: "The pointer to the switch in the format <ovsdb_name>:<ip address>:<port>"
+        initial: ovsdbx:127.0.0.1:6632
+        type: TEXT
+        requires:
+          - openstack_neutron_l2gw: True
+      - initial: False
+        name: openstack_nfv_sriov_enabled
+        label: "OpenStack NFV SRIOV enabled"
+        help_text: "enable SRIOV"
+        type: BOOL
+      - initial: False
+        name: openstack_nfv_dpdk_enabled
+        label: "OpenStack NFV DPDK enabled"
+        help_text: "enable DPDK"
+        type: BOOL
+      - initial: False
+        name: openstack_nova_compute_nfv_req_enabled
+        label: "OpenStack Nova compute NFV req enabled"
+        help_text: "enable cpu pinning and hugepages without dpdk"
+        type: BOOL
+  - name: "ceph_params"
+    label: "Ceph"
+    requires:
+    - ceph_enabled: True
+    fields:
+    - name: "ceph_version"
+      initial: "luminous"
+      type: "CHOICE"
+      help_text: "Ceph version"
+      choices:
+        - - "luminous"
+          - "luminous"
+        - - "kraken"
+          - "kraken"
+        - - "jewel"
+          - "jewel"
+    - name: "ceph_osd_backend"
+      type: "CHOICE"
+      initial: "bluestore"
+      help_text: "OSD backend type"
+      choices:
+        - - "bluestore"
+          - "bluestore"
+        - - "filestore"
+          - "filestore"
+    - name: "backend_network_subnet"
+      type: IP
+      help_text: "IP address of Ceph backend network with network mask - used as cluster_network for OSD data replication"
+      initial: "10.0.2.0/24"
+      mask: True
+      width: half
+    - name: "backend_vlan"
+      type: TEXT
+      help_text: "Ceph backend vlan ID used for OSD data replication on cluster_network"
+      initial: "30"
+      width: half
+    - name: "ceph_hyper_converged"
+      type: "BOOL"
+      help_text: "Collocate Ceph OSD with Nova compute service on Compute hosts"
+      initial: False
+      label: "Ceph Hyper-Converged"
+  - name: "cicd_params"
+    label: "CI/CD"
+    requires:
+    - cicd_enabled: True
+    fields:
+    - help_text: "enable openldap authentication"
+      initial: true
+      name: openldap_enabled
+      type: BOOL
+  - name: "oss_params"
+    label: "OSS"
+    requires:
+    - oss_enabled: True
+    fields:
+    - help_text: "enable cis service"
+      initial: True
+      name: oss_cis_enabled
+      type: BOOL
+    - help_text: "enable security audit service"
+      initial: True
+      name: oss_security_audit_enabled
+      type: BOOL
+    - help_text: "enable cleanup service"
+      initial: True
+      name: oss_cleanup_service_enabled
+      type: BOOL
+    - help_text: "enable support of SalesForce account synchronization"
+      initial: True
+      name: oss_sfdc_support_enabled
+      type: BOOL
+  - name: "repo_params"
+    label: "Repositories"
+    fields:
+    - help_text: enable local repositories
+      initial: False
+      name: local_repositories
+      type: BOOL
+    - help_text: Offline deployment
+      initial: False
+      name: offline_deployment
+      type: BOOL
+product_params_action:
+  - fields:
+    - help_text: IP mask of control network
+      hidden: True
+      initial: '{{ control_network_subnet | netmask }}'
+      name: control_network_netmask
+      type: IP
+    - help_text: IP mask of deploy network
+      hidden: True
+      initial: '{{ deploy_network_subnet | netmask }}'
+      name: deploy_network_netmask
+      type: IP
+    - help_text: "IP address of a mirror VM on deploy network"
+      initial: "{{ deploy_network_subnet | subnet(14) }}"
+      name: "aptly_server_deploy_address"
+      type: "IP"
+      requires:
+      - local_repositories: True
+    - help_text: "IP address of a mirror VM on control network"
+      initial: "{{ control_network_subnet | subnet(14) }}"
+      name: "aptly_server_control_address"
+      type: "IP"
+      requires:
+      - local_repositories: True
+    - help_text: "Hostname of a mirror VM"
+      initial: "apt"
+      name: "aptly_server_hostname"
+      type: "TEXT"
+      requires:
+      - local_repositories: True
+    - help_text: hostname of a KVM node01
+      initial: kvm01
+      name: infra_kvm01_hostname
+      requires:
+      - deployment_type: physical
+      type: TEXT
+    - help_text: IP address of a KVM node01 on control network
+      initial: '{{ control_network_subnet | subnet(241) }}'
+      name: infra_kvm01_control_address
+      requires:
+      - deployment_type: physical
+      type: IP
+      width: half
+    - help_text: IP address of a KVM node01 on management network
+      initial: '{{ deploy_network_subnet | subnet(241) }}'
+      name: infra_kvm01_deploy_address
+      requires:
+      - deployment_type: physical
+      type: IP
+      width: half
+    - help_text: hostname of a KVM node02
+      initial: kvm02
+      name: infra_kvm02_hostname
+      requires:
+      - deployment_type: physical
+      type: TEXT
+    - help_text: IP address of a KVM node02 on control network
+      initial: '{{ control_network_subnet | subnet(242) }}'
+      name: infra_kvm02_control_address
+      requires:
+      - deployment_type: physical
+      type: IP
+      width: half
+    - help_text: IP address of KVM node02 on management network
+      initial: '{{ deploy_network_subnet | subnet(242) }}'
+      name: infra_kvm02_deploy_address
+      requires:
+      - deployment_type: physical
+      type: IP
+      width: half
+    - help_text: hostname of a KVM node03
+      initial: kvm03
+      name: infra_kvm03_hostname
+      requires:
+      - deployment_type: physical
+      type: TEXT
+    - help_text: IP address of a KVM node03 on control network
+      initial: '{{ control_network_subnet | subnet(243) }}'
+      name: infra_kvm03_control_address
+      requires:
+      - deployment_type: physical
+      type: IP
+      width: half
+    - help_text: IP address of KVM node03 on management network
+      initial: '{{ deploy_network_subnet | subnet(243) }}'
+      name: infra_kvm03_deploy_address
+      requires:
+      - deployment_type: physical
+      type: IP
+      width: half
+    - help_text: IP VIP address of KVM cluster
+      initial: '{{ control_network_subnet | subnet(240) }}'
+      name: infra_kvm_vip_address
+      requires:
+      - deployment_type: physical
+      type: IP
+    - help_text: NIC that is used for pxe of KVM servers
+      initial: eth0
+      name: infra_deploy_nic
+      requires:
+      - deployment_type: physical
+      type: TEXT
+    - help_text: First NIC in KVM bond
+      initial: eth1
+      name: infra_primary_first_nic
+      requires:
+      - deployment_type: physical
+      type: TEXT
+      width: half
+    - help_text: Second NIC in KVM bond
+      initial: eth2
+      name: infra_primary_second_nic
+      requires:
+      - deployment_type: physical
+      type: TEXT
+      width: half
+    - name: "infra_bond_mode"
+      help_text: Bond mode for KVM nodes
+      type: "CHOICE"
+      initial: "active-backup"
+      choices:
+        - - "active-backup"
+          - "active-backup"
+        - - "balance-xor"
+          - "balance-xor"
+        - - "broadcast"
+          - "broadcast"
+        - - "802.3ad"
+          - "802.3ad"
+        - - "balance-tlb"
+          - "balance-tlb"
+        - - "balance-alb"
+          - "balance-alb"
+      requires:
+      - deployment_type: physical
+    - help_text: number of compute nodes to be generated
+      initial: '100'
+      name: openstack_compute_count
+      requires:
+      - platform: openstack_enabled
+      type: TEXT
+    - help_text: 'User of upstream proxy used for authentication'
+      initial: 'admin'
+      name: upstream_proxy_user
+      requires:
+      - upstream_proxy_auth_enabled: True
+      type: TEXT
+    - help_text: 'Password of upstream proxy used for authentication'
+      initial: 'passwd'
+      name: upstream_proxy_password
+      requires:
+      - upstream_proxy_auth_enabled: True
+      type: TEXT
+    - help_text: Hash of salt_api_passfor
+      hidden: True
+      initial: '{{ salt_api_password|hash_password }}'
+      name: salt_api_password_hash
+      type: TEXT
+    - help_text: IP mask of tenant network
+      hidden: True
+      initial: '{{ tenant_network_subnet | netmask }}'
+      name: tenant_network_netmask
+      type: IP
+    - help_text: Private key for backups. It is generated automatically.
+      hidden: True
+      initial: |-
+        {{ private_key_backup|indent(8) }}
+      name: backup_private_key
+      type: LONG_TEXT
+    - help_text: Public key for backups. It is generated automatically.
+      hidden: True
+      initial: '{{ public_key_backup }}'
+      name: backup_public_key
+      type: LONG_TEXT
+    label: Infrastructure product parameters
+    name: infra
+    doc: |
+      Infrastructure product parameters
+      =================================
+
+      This section covers KVM nodes which hosts Control plane VMs. By default cookicutter uses three KVM nodes. These nodes can host OpenStack Control plane, CI/CD, StackLight or OpenContrail VMs based on previous selection.
+
+      .. figure:: https://github.com/mceloud/images/blob/master/cookiecutter%20-%20kvm.png?raw=true
+        :width: 70 %
+        :align: center
+        :alt: KVM diagram
+
+  - fields:
+    - help_text: IP address of cicd control node01
+      initial: '{{ control_network_subnet | subnet(91) }}'
+      name: cicd_control_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of cicd control node01
+      initial: '{{ deploy_network_subnet | subnet(91) }}'
+      name: cicd_control_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of cicd control node01
+      initial: cid01
+      name: cicd_control_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of cicd control node02
+      initial: '{{ control_network_subnet | subnet(92) }}'
+      name: cicd_control_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of cicd control node02
+      initial: '{{ deploy_network_subnet | subnet(92) }}'
+      name: cicd_control_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of cicd control node02
+      initial: cid02
+      name: cicd_control_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of cicd control node03
+      initial: '{{ control_network_subnet | subnet(93) }}'
+      name: cicd_control_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of cicd control node03
+      initial: '{{ deploy_network_subnet | subnet(93) }}'
+      name: cicd_control_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of cicd control node03
+      initial: cid03
+      name: cicd_control_node03_hostname
+      type: TEXT
+      width: half
+    - help_text: IP VIP address of cicd control cluster
+      initial: '{{ control_network_subnet | subnet(90) }}'
+      name: cicd_control_vip_address
+      type: IP
+      width: half
+    - help_text: hostname of cicd control cluster
+      initial: cid
+      name: cicd_control_vip_hostname
+      type: TEXT
+      width: half
+    - help_text: Private key for Jenkins. It is generated automatically.
+      hidden: True
+      initial: |-
+        {{ private_key_cicd|indent(8) }}
+      name: cicd_private_key
+      type: LONG_TEXT
+    - help_text: Public key for Jenkins. It is generated automatically.
+      hidden: True
+      initial: '{{ public_key_cicd }}'
+      name: cicd_public_key
+      type: LONG_TEXT
+    - initial: "${_param:cluster_name}"
+      name: openldap_organisation
+      type: TEXT
+      requires:
+      - openldap_enabled: True
+    - initial: "deploy-name.local"
+      name: openldap_domain
+      type: TEXT
+      requires:
+      - openldap_enabled: True
+      help_text: LDAP domain
+    - initial: "https://github.com/Mirantis/mcp-local-repo-model"
+      help_text: Local Repo Model
+      name: local_model_url
+      type: TEXT
+      requires:
+      - local_repositories: True
+      - offline_deployment: False
+    - initial: "${_param:aptly_server_deploy_address}"
+      help_text: Local Repositories
+      name: local_repo_url
+      type: TEXT
+      requires:
+      - local_repositories: True
+    - initial: True
+      help_text: enable local pipelines
+      name: local_pipelines
+      type: BOOL
+      requires:
+      - local_repositories: True
+    - initial: True
+      help_text: enable local docker images
+      name: local_docker_images
+      type: BOOL
+      requires:
+      - local_repositories: True
+    - initial: True
+      help_text: enable local python repo
+      name: local_python_repo
+      type: BOOL
+      requires:
+      - local_repositories: True
+    label: CI/CD product parameters
+    name: cicd
+    doc: |
+      CI/CD product parameters
+      =================================
+
+      .. figure:: https://github.com/mceloud/images/blob/master/cookiecutter%20-%20cicd.png?raw=true
+        :width: 70 %
+        :align: center
+        :alt: StackLight control diagram
+
+    requires:
+    - cicd_enabled: True
+  - label: OSS parameters
+    name: oss
+    doc: |
+      OSS parameters
+      ==============
+
+    fields:
+    - help_text: IP VIP address of OSS cluster
+      initial: '${_param:stacklight_monitor_address}'
+      name: oss_address
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: IP address of OSS node01
+      initial: '${_param:stacklight_monitor_node01_address}'
+      name: oss_node01_address
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: IP address of OSS node02
+      initial: '${_param:stacklight_monitor_node02_address}'
+      name: oss_node02_address
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: IP address of OSS node03
+      initial: '${_param:stacklight_monitor_node03_address}'
+      name: oss_node03_address
+      type: TEXT
+    - help_text: Deploy IP address of OSS node01
+      initial: '${_param:stacklight_monitor_node01_deploy_address}'
+      name: oss_node01_deploy_address
+      type: TEXT
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: Deploy IP address of OSS node02
+      initial: '${_param:stacklight_monitor_node02_deploy_address}'
+      name: oss_node02_deploy_address
+      type: TEXT
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: Deploy IP address of OSS node03
+      initial: '${_param:stacklight_monitor_node03_deploy_address}'
+      name: oss_node03_deploy_address
+      type: TEXT
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: "OpenStack auth URL for OSS tools"
+      initial: "http://172.17.16.190:5000/v3"
+      name: oss_openstack_auth_url
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "Username for access to OpenStack"
+      initial: "admin"
+      name: oss_openstack_username
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "Password for access to OpenStack"
+      initial: "nova"
+      name: oss_openstack_password
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "OpenStack project"
+      initial: "admin"
+      name: oss_openstack_project
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "OpenStack domain id"
+      initial: "default"
+      name: oss_openstack_domain_id
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "OpenStack ssl verification mechanism"
+      initial: "False"
+      name: oss_openstack_ssl_verify
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "OpenStack plain CA certificate"
+      initial: "      -----BEGIN CERTIFICATE-----
+      MIIE0DCCA7igAwIBAgIBBzANBgkqhkiG9w0BAQsFADCBgzELMAkGA1UEBhMCVVMx
+      EDAOBgNVBAgTB0FyaXpvbmExEzARBgNVBAcTClNjb3R0c2RhbGUxGjAYBgNVBAoT
+      AAGjggEaMIIBFjAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBBjAdBgNV
+      91cxG7685C/b+LrTW+C05+Z5Yg4MotdqY3MxtfWoSKQ7CC2iXZDXtHwlTxFWMMS2
+      -----END CERTIFICATE-----
+      -----BEGIN CERTIFICATE-----
+      dGhvcml0eSAtIEcyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv3Fi
+      9kIDN0zmiN/VryTyscPfzLXs4Jlet0lUIDyUGAzHHFIYSaRt4bNYC8..."
+      name: oss_openstack_cert
+      type: LONG_TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "OpenStack credentials path"
+      initial: "/srv/volumes/rundeck/storage"
+      name: oss_openstack_credentials_path
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "OpenStack endpoint type interface for service connections"
+      initial: "public"
+      name: oss_openstack_endpoint_type
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "Switch Rundeck service to use postgresql database as external source for datastore"
+      initial: False
+      name: oss_rundeck_external_datasource_enabled
+      type: BOOL
+      requires:
+      - oss_enabled: True
+    - help_text: "Private key for Rundeck. It is generated automatically."
+      hidden: True
+      initial: |-
+        {{ private_key_rundeck|indent(8) }}
+      name: oss_runbook_private_key
+      type: LONG_TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "Public key for Rundeck. It is generated automatically."
+      hidden: True
+      initial: '{{ public_key_rundeck }}'
+      name: oss_runbook_public_key
+      type: LONG_TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "Forward proxy-endpoint for Rundeck dashboard to provide access from external network"
+      initial: False
+      name: rundeck_forward_iframe
+      type: BOOL
+      requires:
+      - oss_enabled: True
+    - help_text: "Define proxy-endpoint ip address for Rundeck dashboard to provide access from external network"
+      initial: "${_param:openstack_proxy_address}"
+      name: rundeck_iframe_host
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "Define proxy-endpoint port for Rundeck dashboard to provide access from external network"
+      initial: "${_param:haproxy_rundeck_exposed_port}"
+      name: rundeck_iframe_port
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "Use ssl proxy-endpoint for Rundeck dashboard to provide access from external network"
+      initial: False
+      name: rundeck_iframe_ssl
+      type: BOOL
+      requires:
+      - oss_enabled: True
+    - help_text: "Notification email sender"
+      initial: ""
+      name: oss_webhook_from
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "Notification email recipients"
+      initial: ""
+      name: oss_webhook_recipients
+      type: TEXT
+      requires:
+      - oss_enabled: True
+    - help_text: "Authentication url for SalesForce Service"
+      initial: ""
+      name: sfdc_auth_url
+      type: TEXT
+      requires:
+      - oss_sfdc_support_enabled: True
+    - help_text: "Username for SalesForce Service"
+      initial: ""
+      name: sfdc_username
+      type: TEXT
+      requires:
+      - oss_sfdc_support_enabled: True
+    - help_text: "Password for SalesForce Service"
+      initial: ""
+      name: sfdc_password
+      type: TEXT
+      requires:
+      - oss_sfdc_support_enabled: True
+    - help_text: "Consumer key for SalesForce Service"
+      initial: ""
+      name: sfdc_consumer_key
+      type: TEXT
+      requires:
+      - oss_sfdc_support_enabled: True
+    - help_text: "Consumer secret for SalesForce Service"
+      initial: ""
+      name: sfdc_consumer_secret
+      type: TEXT
+      requires:
+      - oss_sfdc_support_enabled: True
+    - help_text: "Organization id for SalesForce Service"
+      initial: ""
+      name: sfdc_organization_id
+      type: TEXT
+      requires:
+      - oss_sfdc_support_enabled: True
+    - help_text: "The Cloud ID in Salesforce."
+      initial: ""
+      name: sfdc_environment_id
+      type: TEXT
+      requires:
+      - oss_sfdc_support_enabled: True
+    - help_text: "Enable sandbox support for SalesForce Service"
+      initial: True
+      name: sfdc_sandbox_enabled
+      type: BOOL
+      requires:
+      - oss_sfdc_support_enabled: True
+    - help_text: "CIS username"
+      initial: "${_param:oss_openstack_username}"
+      name: oss_cis_username
+      type: TEXT
+      requires:
+      - oss_cis_enabled: True
+    - help_text: "CIS password"
+      initial: "${_param:oss_openstack_password}"
+      name: oss_cis_password
+      type: TEXT
+      requires:
+      - oss_cis_enabled: True
+    - help_text: "CIS OpenStack auth url"
+      initial: "${_param:oss_openstack_auth_url}"
+      name: oss_cis_os_auth_url
+      type: TEXT
+      requires:
+      - oss_cis_enabled: True
+    - help_text: "CIS OpenStack endpoint type"
+      initial: "${_param:oss_openstack_endpoint_type}"
+      name: oss_cis_endpoint_type
+      type: TEXT
+      requires:
+      - oss_cis_enabled: True
+    - help_text: "CIS OpenStack project"
+      initial: "${_param:oss_openstack_project}"
+      name: oss_cis_project
+      type: TEXT
+      requires:
+      - oss_cis_enabled: True
+    - help_text: "CIS OpenStack domain id"
+      initial: "${_param:oss_openstack_domain_id}"
+      name: oss_cis_domain_id
+      type: TEXT
+      requires:
+      - oss_cis_enabled: True
+    - help_text: "CIS OpenStack CA Certificate"
+      initial: "${_param:oss_openstack_cert}"
+      name: oss_cis_cert
+      type: TEXT
+      requires:
+      - oss_cis_enabled: True
+    - help_text: "CIS jobs repository"
+      initial: "https://github.com/Mirantis/rundeck-cis-jobs.git"
+      name: oss_cis_jobs_repository
+      type: TEXT
+      requires:
+      - oss_cis_enabled: True
+    - help_text: "CIS jobs repository branch"
+      initial: "master"
+      name: oss_cis_jobs_repository_branch
+      type: TEXT
+      requires:
+      - oss_cis_enabled: True
+    - help_text: "Security audit username"
+      initial: "${_param:oss_openstack_username}"
+      name: oss_security_audit_username
+      type: TEXT
+      requires:
+      - oss_security_audit_enabled: True
+    - help_text: "Security audit password"
+      initial: "${_param:oss_openstack_password}"
+      name: oss_security_audit_password
+      type: TEXT
+      requires:
+      - oss_security_audit_enabled: True
+    - help_text: "Security audit auth url"
+      initial: "${_param:oss_openstack_auth_url}"
+      name: oss_security_audit_os_auth_url
+      type: TEXT
+      requires:
+      - oss_security_audit_enabled: True
+    - help_text: "Security audit project"
+      initial: "${_param:oss_openstack_project}"
+      name: oss_security_audit_project
+      type: TEXT
+      requires:
+      - oss_security_audit_enabled: True
+    - help_text: "Security audit user domain id"
+      initial: "${_param:oss_openstack_domain_id}"
+      name: oss_security_audit_user_domain_id
+      type: TEXT
+      requires:
+      - oss_security_audit_enabled: True
+    - help_text: "Security audit project domain id"
+      initial: "${_param:oss_openstack_domain_id}"
+      name: oss_security_audit_project_domain_id
+      type: TEXT
+      requires:
+      - oss_security_audit_enabled: True
+    - help_text: "Security audit OS-cloud credentials path"
+      initial: "${_param:oss_openstack_credentials_path}"
+      name: oss_security_audit_os_credentials_path
+      type: TEXT
+      requires:
+      - oss_security_audit_enabled: True
+    - help_text: "Cleanup service OS-cloud credentials path"
+      initial: "${_param:oss_openstack_credentials_path}"
+      name: oss_cleanup_service_os_credentials_path
+      type: TEXT
+      requires:
+      - oss_cleanup_service_enabled: True
+    - help_text: "Cleanup service username"
+      initial: "${_param:oss_openstack_username}"
+      name: oss_cleanup_service_username
+      type: TEXT
+      requires:
+      - oss_cleanup_service_enabled: True
+    - help_text: "Cleanup service password"
+      initial: "${_param:oss_openstack_password}"
+      name: oss_cleanup_service_password
+      type: TEXT
+      requires:
+      - oss_cleanup_service_enabled: True
+    - help_text: "Cleanup service auth url"
+      initial: "${_param:oss_openstack_auth_url}"
+      name: oss_cleanup_service_os_auth_url
+      type: TEXT
+      requires:
+      - oss_cleanup_service_enabled: True
+    - help_text: "Cleanup service project"
+      initial: "${_param:oss_openstack_project}"
+      name: oss_cleanup_service_project
+      type: TEXT
+      requires:
+      - oss_cleanup_service_enabled: True
+    - help_text: "Cleanup service project domain id"
+      initial: "${_param:oss_openstack_username_domain_id}"
+      name: oss_cleanup_service_project_domain_id
+      type: TEXT
+      requires:
+      - oss_cleanup_service_enabled: True
+  - fields:
+    - help_text: Image with CNI binaries
+      initial: docker-prod-local.artifactory.mirantis.com/mirantis/projectcalico/calico/cni:latest
+      name: calico_cni_image
+      type: TEXT
+      requires:
+        - kubernetes_network_calico_enabled: True
+    - help_text: ''
+      initial: True
+      name: calico_enable_nat
+      type: BOOL
+      requires:
+        - kubernetes_network_calico_enabled: True
+    - help_text: Image with Calico
+      initial: docker-prod-local.artifactory.mirantis.com/mirantis/projectcalico/calico/node:latest
+      name: calico_image
+      type: TEXT
+      requires:
+        - kubernetes_network_calico_enabled: True
+    - help_text: Netmask of calico_network
+      initial: '16'
+      name: calico_netmask
+      type: TEXT
+      requires:
+        - kubernetes_network_calico_enabled: True
+    - help_text: Network that is used for kubernetes containers
+      initial: 192.168.0.0
+      name: calico_network
+      type: IP
+      requires:
+        - kubernetes_network_calico_enabled: True
+    - help_text: Image with Calicoctl command
+      initial: docker-prod-local.artifactory.mirantis.com/mirantis/projectcalico/calico/ctl:latest
+      name: calicoctl_image
+      type: TEXT
+      requires:
+        - kubernetes_network_calico_enabled: True
+    - help_text: enable ssl for etcd
+      initial: True
+      name: etcd_ssl
+      type: BOOL
+    - help_text: Image with Kubernetes.
+      initial: docker-prod-local.artifactory.mirantis.com/mirantis/kubernetes/hyperkube-amd64:v1.8.5-4
+      name: hyperkube_image
+      type: TEXT
+    - help_text: Enable Virtlet addon
+      initial: False
+      name: kubernetes_virtlet_enabled
+      type: BOOL
+    - help_text: Enable External DNS Kubernetes addon
+      initial: False
+      name: kubernetes_externaldns_enabled
+      type: BOOL
+    - help_text: DNS provider for External DNS
+      initial: "coredns"
+      name: kubernetes_externaldns_provider
+      type: CHOICE
+      choices:
+        - - "coredns"
+          - "CoreDNS"
+        - - "designate"
+          - "Designate"
+        - - "aws"
+          - "AWS"
+        - - "google"
+          - "Google"
+      requires:
+        - kubernetes_externaldns_provider: True
+    - help_text: hostname of kubernetes compute node01
+      initial: cmp01
+      name: kubernetes_compute_node01_hostname
+      type: TEXT
+    - help_text: ''
+      initial: '{{ deploy_network_subnet | subnet(101) }}'
+      name: kubernetes_compute_node01_deploy_address
+      type: IP
+      width: half
+    - help_text: ''
+      initial: '{{ control_network_subnet | subnet(101) }}'
+      name: kubernetes_compute_node01_address
+      type: IP
+      width: half
+    - help_text: ''
+      initial: '{{ tenant_network_subnet | subnet(101) }}'
+      name: kubernetes_compute_node01_tenant_address
+      type: IP
+      requires:
+        - kubernetes_network_opencontrail_enabled: True
+    - help_text: hostname of kubernetes compute node02
+      initial: cmp02
+      name: kubernetes_compute_node02_hostname
+      type: TEXT
+    - help_text: ''
+      initial: '{{ deploy_network_subnet | subnet(102) }}'
+      name: kubernetes_compute_node02_deploy_address
+      type: IP
+      width: half
+    - help_text: ''
+      initial: '{{ control_network_subnet | subnet(102) }}'
+      name: kubernetes_compute_node02_address
+      type: IP
+      width: half
+    - help_text: ''
+      initial: '{{ tenant_network_subnet | subnet(102) }}'
+      name: kubernetes_compute_node02_tenant_address
+      type: IP
+      requires:
+        - kubernetes_network_opencontrail_enabled: True
+    - help_text: ''
+      initial: '{{ control_network_subnet | subnet(10) }}'
+      name: kubernetes_control_address
+      type: IP
+    - help_text: IP address of kubernetes control node01
+      initial: '{{ control_network_subnet | subnet(11) }}'
+      name: kubernetes_control_node01_address
+      type: IP
+      width: half
+    - help_text: ''
+      initial: '{{ deploy_network_subnet | subnet(11) }}'
+      name: kubernetes_control_node01_deploy_address
+      type: IP
+      width: half
+    - help_text: hostname of kubernetes control node01
+      initial: ctl01
+      name: kubernetes_control_node01_hostname
+      type: TEXT
+    - help_text: ''
+      initial: '{{ tenant_network_subnet | subnet(11) }}'
+      name: kubernetes_control_node01_tenant_address
+      type: IP
+      requires:
+        - kubernetes_network_opencontrail_enabled: True
+    - help_text: IP address of kubernetes control node02
+      initial: '{{ control_network_subnet | subnet(12) }}'
+      name: kubernetes_control_node02_address
+      type: IP
+      width: half
+    - help_text: ''
+      initial: '{{ deploy_network_subnet | subnet(12) }}'
+      name: kubernetes_control_node02_deploy_address
+      type: IP
+      width: half
+    - help_text: hostname of kubernetes control node02
+      initial: ctl02
+      name: kubernetes_control_node02_hostname
+      type: TEXT
+    - help_text: IP address of kubernetes control node03
+      initial: '{{ control_network_subnet | subnet(13) }}'
+      name: kubernetes_control_node03_address
+      type: IP
+      width: half
+    - help_text: ''
+      initial: '{{ tenant_network_subnet | subnet(12) }}'
+      name: kubernetes_control_node02_tenant_address
+      type: IP
+      requires:
+        - kubernetes_network_opencontrail_enabled: True
+    - help_text: ''
+      initial: '{{ deploy_network_subnet | subnet(13) }}'
+      name: kubernetes_control_node03_deploy_address
+      type: IP
+      width: half
+    - help_text: hostname of kubernetes control node03
+      initial: ctl03
+      name: kubernetes_control_node03_hostname
+      type: TEXT
+    - help_text: ''
+      initial: '{{ tenant_network_subnet | subnet(13) }}'
+      name: kubernetes_control_node03_tenant_address
+      type: IP
+      requires:
+        - kubernetes_network_opencontrail_enabled: True
+    - help_text: 'Public floating IP pool'
+      initial: '10.151.0.0/16'
+      name: opencontrail_public_ip_range
+      type: TEXT
+      width: half
+      requires:
+        - kubernetes_network_opencontrail_enabled: True
+    - help_text: 'Private range used for pods'
+      initial: '10.150.0.0/16'
+      name: opencontrail_private_ip_range
+      type: TEXT
+      width: half
+      requires:
+        - kubernetes_network_opencontrail_enabled: True
+    - help_text: Interface used for keepalived VIP
+      initial: ens4
+      name: kubernetes_keepalived_vip_interface
+      type: TEXT
+    label: Kubernetes product parameters
+    name: kubernetes
+    requires:
+    - platform: kubernetes_enabled
+  - fields:
+    - help_text: ''
+      initial: '{{ control_network_subnet | subnet(30) }}'
+      name: opencontrail_analytics_address
+      type: IP
+      width: half
+    - help_text: ''
+      initial: nal
+      name: opencontrail_analytics_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a opencontrail analytics node01 on control network
+      initial: '{{ control_network_subnet | subnet(31) }}'
+      name: opencontrail_analytics_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a opencontrail analytics node01
+      initial: '{{ deploy_network_subnet | subnet(31) }}'
+      name: opencontrail_analytics_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a opencontrail analytics node01 on control network
+      initial: nal01
+      name: opencontrail_analytics_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a opencontrail analytics node02 on control network
+      initial: '{{ control_network_subnet | subnet(32) }}'
+      name: opencontrail_analytics_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a opencontrail analytics node02
+      initial: '{{ deploy_network_subnet | subnet(32) }}'
+      name: opencontrail_analytics_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a opencontrail analytics node02 on control network
+      initial: nal02
+      name: opencontrail_analytics_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a opencontrail analytics node03 on control network
+      initial: '{{ control_network_subnet | subnet(33) }}'
+      name: opencontrail_analytics_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a opencontrail analytics node03
+      initial: '{{ deploy_network_subnet | subnet(33) }}'
+      name: opencontrail_analytics_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a opencontrail analytics node03 on control network
+      initial: nal03
+      name: opencontrail_analytics_node03_hostname
+      type: TEXT
+      width: half
+    - help_text: mask that is used in opencontrail. Automatically taken from tenant
+        network.
+      hidden: True
+      initial: '{{ tenant_network_subnet[-2:] }}'
+      name: opencontrail_compute_iface_mask
+      type: TEXT
+    - help_text: 'Interface used for vhost interface'
+      initial: 'ens4'
+      name: opencontrail_compute_iface
+      type: TEXT
+      requires:
+      - deployment_type: 'heat'
+    - help_text: IP VIP address of opencontrail control cluster
+      initial: '{{ control_network_subnet | subnet(20) }}'
+      name: opencontrail_control_address
+      type: IP
+      width: half
+    - help_text: hostname of opencontrail control cluster
+      initial: ntw
+      name: opencontrail_control_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a opencontrail control node01 on control network
+      initial: '{{ control_network_subnet | subnet(21) }}'
+      name: opencontrail_control_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a opencontrail control node01
+      initial: '{{ deploy_network_subnet | subnet(21) }}'
+      name: opencontrail_control_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a opencontrail control node01 on control network
+      initial: ntw01
+      name: opencontrail_control_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a opencontrail control node02 on control network
+      initial: '{{ control_network_subnet | subnet(22) }}'
+      name: opencontrail_control_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a opencontrail control node02
+      initial: '{{ deploy_network_subnet | subnet(22) }}'
+      name: opencontrail_control_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a opencontrail control node02 on control network
+      initial: ntw02
+      name: opencontrail_control_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a opencontrail control node03 on control network
+      initial: '{{ control_network_subnet | subnet(23) }}'
+      name: opencontrail_control_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a opencontrail control node03
+      initial: '{{ deploy_network_subnet | subnet(23) }}'
+      name: opencontrail_control_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a opencontrail control node03 on control network
+      initial: ntw03
+      name: opencontrail_control_node03_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of opencontrail gateway 01 router for BGP
+      initial: '{{ control_network_subnet | subnet(100) }}'
+      name: opencontrail_router01_address
+      type: IP
+      width: half
+    - help_text: hostname of opencontrail gateway 01 router
+      initial: rtr01
+      name: opencontrail_router01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of opencontrail gateway 02 router for BGP
+      initial: '{{ control_network_subnet | subnet(101) }}'
+      name: opencontrail_router02_address
+      type: IP
+      width: half
+    - help_text: hostname of opencontrail gateway 02 router
+      initial: rtr02
+      name: opencontrail_router02_hostname
+      type: TEXT
+      width: half
+    label: OpenContrail service parameters
+    name: opencontrail
+    doc: |
+      OpenContrail service parameters
+      =================================
+
+      OpenContrail Control plane runs on six VMs in total - three for Control and three for Analytics.
+
+      .. figure:: https://github.com/mceloud/images/blob/master/cookiecutter%20-%20opencontrail.png?raw=true
+        :width: 70 %
+        :align: center
+        :alt: OpenContrail control diagram
+
+      OpenContrail kernel vRouter setup by cookiecutter:
+
+      .. figure:: https://github.com/mceloud/images/blob/master/cookiecutter%20-%20compute.png?raw=true
+        :width: 70 %
+        :align: center
+        :alt: compute diagram
+
+    requires:
+    - opencontrail_enabled: True
+  - fields:
+    - help_text: Deploy NIC on management network
+      initial: eth0
+      name: compute_deploy_nic
+      type: TEXT
+      width: half
+      requires:
+        - static_ips_on_deploy_network_enabled: True
+    - help_text: First NIC in OpenStack compute bond
+      initial: eth1
+      name: compute_primary_first_nic
+      type: TEXT
+      width: half
+    - help_text: Second NIC in OpenStack compute bond
+      initial: eth2
+      name: compute_primary_second_nic
+      type: TEXT
+      width: half
+    - name: "compute_bond_mode"
+      help_text: Bond mode for Compute nodes
+      type: "CHOICE"
+      initial: "active-backup"
+      choices:
+        - - "active-backup"
+          - "active-backup"
+        - - "balance-xor"
+          - "balance-xor"
+        - - "broadcast"
+          - "broadcast"
+        - - "802.3ad"
+          - "802.3ad"
+        - - "balance-tlb"
+          - "balance-tlb"
+        - - "balance-alb"
+          - "balance-alb"
+      requires:
+      - deployment_type: physical
+    - help_text: Deploy NIC on management network
+      initial: eth0
+      name: gateway_deploy_nic
+      type: TEXT
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+        - static_ips_on_deploy_network_enabled: True
+    - help_text: First NIC in OVS gateway bond
+      initial: eth1
+      name: gateway_primary_first_nic
+      type: TEXT
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: Second NIC in OVS gateway bond
+      initial: eth2
+      name: gateway_primary_second_nic
+      type: TEXT
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: compute hostname prefix
+      initial: cmp
+      name: openstack_compute_rack01_hostname
+      type: TEXT
+    - help_text: control plane network prefix for compute nodes
+      initial: '{{ ".".join(control_network_subnet.split(".")[:3]) }}'
+      name: openstack_compute_rack01_single_subnet
+      type: TEXT
+      width: half
+    - help_text: deploy plane network prefix for compute nodes
+      initial: '{{ ".".join(deploy_network_subnet.split(".")[:3]) }}'
+      name: openstack_compute_rack01_deploy_subnet
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: data plane network prefix for compute nodes
+      initial: '{{ ".".join(tenant_network_subnet.split(".")[:3]) }}'
+      name: openstack_compute_rack01_tenant_subnet
+      type: TEXT
+      width: half
+    - help_text: IP VIP address of control cluster on control network
+      initial: '{{ control_network_subnet | subnet(10) }}'
+      name: openstack_control_address
+      type: IP
+      width: half
+    - help_text: hostname of VIP control cluster
+      initial: ctl
+      name: openstack_control_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a control node01 on control network
+      initial: '{{ control_network_subnet | subnet(11) }}'
+      name: openstack_control_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a control node01
+      initial: '{{ deploy_network_subnet | subnet(11) }}'
+      name: openstack_control_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a control node01
+      initial: ctl01
+      name: openstack_control_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a control node02 on control network
+      initial: '{{ control_network_subnet | subnet(12) }}'
+      name: openstack_control_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a control node02
+      initial: '{{ deploy_network_subnet | subnet(12) }}'
+      name: openstack_control_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a control node02
+      initial: ctl02
+      name: openstack_control_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a control node03 on control network
+      initial: '{{ control_network_subnet | subnet(13) }}'
+      name: openstack_control_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a control node03
+      initial: '{{ deploy_network_subnet | subnet(13) }}'
+      name: openstack_control_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a control node03
+      initial: ctl03
+      name: openstack_control_node03_hostname
+      type: TEXT
+      width: half
+    - help_text: IP VIP address of database cluster on control network
+      initial: '{{ control_network_subnet | subnet(50) }}'
+      name: openstack_database_address
+      type: IP
+      width: half
+    - help_text: hostname of VIP database cluster
+      initial: dbs
+      name: openstack_database_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a database node01 on control network
+      initial: '{{ control_network_subnet | subnet(51) }}'
+      name: openstack_database_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a database node01
+      initial: '{{ deploy_network_subnet | subnet(51) }}'
+      name: openstack_database_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a database node01
+      initial: dbs01
+      name: openstack_database_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a database node02 on control network
+      initial: '{{ control_network_subnet | subnet(52) }}'
+      name: openstack_database_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a database node02
+      initial: '{{ deploy_network_subnet | subnet(52) }}'
+      name: openstack_database_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a database node02
+      initial: dbs02
+      name: openstack_database_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a database node03 on control network
+      initial: '{{ control_network_subnet | subnet(53) }}'
+      name: openstack_database_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a database node03
+      initial: '{{ deploy_network_subnet | subnet(53) }}'
+      name: openstack_database_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a database node03
+      initial: dbs03
+      name: openstack_database_node03_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of gateway node01
+      initial: '{{ control_network_subnet | subnet(224) }}'
+      name: openstack_gateway_node01_address
+      type: IP
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: Deploy IP address of gateway node01
+      initial: '{{ deploy_network_subnet | subnet(224) }}'
+      name: openstack_gateway_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - openstack_network_engine: 'ovs'
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of gateway node01
+      initial: gtw01
+      name: openstack_gateway_node01_hostname
+      type: TEXT
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: IP tenant address of gateway node01
+      initial: '{{ tenant_network_subnet | subnet(6) }}'
+      name: openstack_gateway_node01_tenant_address
+      type: IP
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: IP address of gateway node02
+      initial: '{{ control_network_subnet | subnet(225) }}'
+      name: openstack_gateway_node02_address
+      type: IP
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: Deploy IP address of gateway node02
+      initial: '{{ deploy_network_subnet | subnet(225) }}'
+      name: openstack_gateway_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - openstack_network_engine: 'ovs'
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of gateway node02
+      initial: gtw02
+      name: openstack_gateway_node02_hostname
+      type: TEXT
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: IP tenant address of gateway node02
+      initial: '{{ tenant_network_subnet | subnet(7) }}'
+      name: openstack_gateway_node02_tenant_address
+      type: IP
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: IP address of gateway node03
+      initial: '{{ control_network_subnet | subnet(226) }}'
+      name: openstack_gateway_node03_address
+      type: IP
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: Deploy IP address of gateway node03
+      initial: '{{ deploy_network_subnet | subnet(226) }}'
+      name: openstack_gateway_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - openstack_network_engine: 'ovs'
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of gateway node03
+      initial: gtw03
+      name: openstack_gateway_node03_hostname
+      type: TEXT
+      width: half
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: IP tenant address of gateway node03
+      initial: '{{ tenant_network_subnet | subnet(8) }}'
+      name: openstack_gateway_node03_tenant_address
+      type: IP
+      requires:
+        - openstack_network_engine: 'ovs'
+    - help_text: IP VIP address of message queue cluster on control network
+      initial: '{{ control_network_subnet | subnet(40) }}'
+      name: openstack_message_queue_address
+      type: IP
+      width: half
+    - help_text: hostname of VIP message queue cluster
+      initial: msg
+      name: openstack_message_queue_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a message queue node01 on control network
+      initial: '{{ control_network_subnet | subnet(41) }}'
+      name: openstack_message_queue_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of message queue node01
+      initial: '{{ deploy_network_subnet | subnet(41) }}'
+      name: openstack_message_queue_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a message queue node01
+      initial: msg01
+      name: openstack_message_queue_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a message queue node02 on control network
+      initial: '{{ control_network_subnet | subnet(42) }}'
+      name: openstack_message_queue_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of message queue node02
+      initial: '{{ deploy_network_subnet | subnet(42) }}'
+      name: openstack_message_queue_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a message queue node02
+      initial: msg02
+      name: openstack_message_queue_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a message queue node03 on control network
+      initial: '{{ control_network_subnet | subnet(43) }}'
+      name: openstack_message_queue_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of message queue node03
+      initial: '{{ deploy_network_subnet | subnet(43) }}'
+      name: openstack_message_queue_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a message queue node03
+      initial: msg03
+      name: openstack_message_queue_node03_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a benchmark node on control network
+      initial: '{{ control_network_subnet | subnet(95) }}'
+      name: openstack_benchmark_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a benchmark node
+      initial: '{{ deploy_network_subnet | subnet(95) }}'
+      name: openstack_benchmark_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a benchmark node
+      initial: bmk01
+      name: openstack_benchmark_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a upgrade node on control network
+      initial: '{{ control_network_subnet | subnet(19) }}'
+      name: openstack_upgrade_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a upgrade node
+      initial: '{{ deploy_network_subnet | subnet(19) }}'
+      name: openstack_upgrade_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: Tag of the physical network the sriov interface belongs to
+      initial: physnet1
+      name: openstack_nfv_sriov_network
+      requires:
+      - openstack_nfv_sriov_enabled: True
+      type: TEXT
+    - help_text: number of allocated Virtual Function interfaces
+      initial: '7'
+      name: openstack_nfv_sriov_numvfs
+      requires:
+      - openstack_nfv_sriov_enabled: True
+      type: TEXT
+    - help_text: Physical Function interface providing the Virtual Functions
+      initial: eth7
+      name: openstack_nfv_sriov_pf_nic
+      requires:
+      - openstack_nfv_sriov_enabled: True
+      type: TEXT
+    - help_text: number of Hugepages if dpdk enabled
+      initial: '16'
+      name: openstack_nova_compute_hugepages_count
+      requires_or:
+      - openstack_nfv_dpdk_enabled: True
+      - openstack_nova_compute_nfv_req_enabled: True
+      type: TEXT
+    - help_text: pinned cpu's for nova
+      initial: 1,2,3,4,5,7,8,9,10,11
+      name: openstack_nova_cpu_pinning
+      width: half
+      requires_or:
+      - openstack_nfv_dpdk_enabled: True
+      - openstack_nova_compute_nfv_req_enabled: True
+      - ceph_hyper_converged: True
+      type: TEXT
+    - help_text: Reserved memory for Host and Ceph processes - for example 3GB * number of OSD disks on the host
+      initial: '20000'
+      name: openstack_nova_compute_reserved_host_memory_mb
+      type: TEXT
+      width: half
+      requires:
+      - ceph_hyper_converged: True
+    - help_text: If openstack_network_engine == ovs. Enables dvr.
+      initial: false
+      name: openstack_ovs_dvr_enabled
+      requires:
+      - openstack_network_engine: ovs
+      type: BOOL
+    - help_text: If openstack_network_engine == ovs. Enables QoS.
+      initial: false
+      name: openstack_neutron_qos
+      requires:
+      - openstack_network_engine: ovs
+      type: BOOL
+    - help_text: vlan range for OVS networks, valid for vlan encapslulation_type
+      initial: 2416:2420
+      name: openstack_ovs_encapsulation_vlan_range
+      requires:
+      - openstack_network_engine: ovs
+      - openstack_ovs_encapsulation_type: vlan
+      type: TEXT
+    - help_text: If openstack_network_engine == ovs. Enables VLAN-aware VMs.
+      initial: false
+      name: openstack_neutron_vlan_aware_vms
+      requires:
+      - openstack_network_engine: ovs
+      type: BOOL
+    - help_text: Enables BGP VPN service.
+      initial: false
+      name: openstack_neutron_bgp_vpn
+      type: BOOL
+    - name: openstack_neutron_bgp_vpn_driver
+      initial: bagpipe
+      help_text: "Driver for BGP VPN service."
+      type: "CHOICE"
+      choices:
+        - - "bagpipe"
+          - "BaGPipe"
+        - - "opencontrail"
+          - "OpenContrail"
+        - - "opendaylight"
+          - "OpenDaylight"
+    - help_text: IP VIP address of proxy cluster on control network
+      initial: '{{ control_network_subnet | subnet(80) }}'
+      name: openstack_proxy_address
+      type: IP
+      width: half
+    - help_text: hostname of VIP proxy cluster
+      initial: prx
+      name: openstack_proxy_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a proxy node01 on control network
+      initial: '{{ control_network_subnet | subnet(81) }}'
+      name: openstack_proxy_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a proxy node01
+      initial: '{{ deploy_network_subnet | subnet(81) }}'
+      name: openstack_proxy_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a proxy node01
+      initial: prx01
+      name: openstack_proxy_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of a proxy node02 on control network
+      initial: '{{ control_network_subnet | subnet(82) }}'
+      name: openstack_proxy_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of a proxy node02
+      initial: '{{ deploy_network_subnet | subnet(82) }}'
+      name: openstack_proxy_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of a proxy node02
+      initial: prx02
+      name: openstack_proxy_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: version of OpenStack
+      initial: ocata
+      name: openstack_version
+      type: TEXT
+    label: OpenStack product parameters
+    name: openstack
+    doc: |
+      OpenStack product parameters
+      =================================
+
+      .. figure:: https://github.com/mceloud/images/blob/master/cookiecutter%20-%20openstack.png?raw=true
+        :width: 70 %
+        :align: center
+        :alt: OpenStack control diagram
+
+    requires:
+    - platform: openstack_enabled
+  - fields:
+    - help_text: IP VIP address of stacklight logging cluster
+      initial: '{{ control_network_subnet | subnet(60) }}'
+      name: stacklight_log_address
+      type: IP
+      width: half
+    - help_text: hostname of stacklight logging cluster
+      initial: log
+      name: stacklight_log_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of stacklight logging node01
+      initial: '{{ control_network_subnet | subnet(61) }}'
+      name: stacklight_log_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of stacklight logging node01
+      initial: '{{ deploy_network_subnet | subnet(61) }}'
+      name: stacklight_log_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of stacklight logging node01
+      initial: log01
+      name: stacklight_log_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of stacklight logging node02
+      initial: '{{ control_network_subnet | subnet(62) }}'
+      name: stacklight_log_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of stacklight logging node02
+      initial: '{{ deploy_network_subnet | subnet(62) }}'
+      name: stacklight_log_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of stacklight logging node02
+      initial: log02
+      name: stacklight_log_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of stacklight logging node03
+      initial: '{{ control_network_subnet | subnet(63) }}'
+      name: stacklight_log_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of stacklight logging node03
+      initial: '{{ deploy_network_subnet | subnet(63) }}'
+      name: stacklight_log_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of stacklight logging node03
+      initial: log03
+      name: stacklight_log_node03_hostname
+      type: TEXT
+      width: half
+    - help_text: IP VIP address of stacklight monitoring cluster
+      initial: '{{ control_network_subnet | subnet(70) }}'
+      name: stacklight_monitor_address
+      type: IP
+      width: half
+    - help_text: hostname of stacklight monitoring cluster
+      initial: mon
+      name: stacklight_monitor_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of stacklight monitoring node01
+      initial: '{{ control_network_subnet | subnet(71) }}'
+      name: stacklight_monitor_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of stacklight monitoring node01
+      initial: '{{ deploy_network_subnet | subnet(71) }}'
+      name: stacklight_monitor_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of stacklight monitoring node01
+      initial: mon01
+      name: stacklight_monitor_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of stacklight monitoring node02
+      initial: '{{ control_network_subnet | subnet(72) }}'
+      name: stacklight_monitor_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of stacklight monitoring node02
+      initial: '{{ deploy_network_subnet | subnet(72) }}'
+      name: stacklight_monitor_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of stacklight monitoring node02
+      initial: mon02
+      name: stacklight_monitor_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of stacklight monitoring node03
+      initial: '{{ control_network_subnet | subnet(73) }}'
+      name: stacklight_monitor_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of stacklight monitoring node03
+      initial: '{{ deploy_network_subnet | subnet(73) }}'
+      name: stacklight_monitor_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of stacklight monitoring node03
+      initial: mon03
+      name: stacklight_monitor_node03_hostname
+      type: TEXT
+      width: half
+    - help_text: IP VIP address of stacklight telemetry cluster
+      initial: '{{ control_network_subnet | subnet(85) }}'
+      name: stacklight_telemetry_address
+      type: IP
+      width: half
+    - help_text: hostname of stacklight telemetry cluster
+      initial: mtr
+      name: stacklight_telemetry_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of stacklight telemetry node01
+      initial: '{{ control_network_subnet | subnet(86) }}'
+      name: stacklight_telemetry_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of stacklight telemetry node01
+      initial: '{{ deploy_network_subnet | subnet(86) }}'
+      name: stacklight_telemetry_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of stacklight telemetry node01
+      initial: mtr01
+      name: stacklight_telemetry_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of stacklight telemetry node02
+      initial: '{{ control_network_subnet | subnet(87) }}'
+      name: stacklight_telemetry_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of stacklight telemetry node02
+      initial: '{{ deploy_network_subnet | subnet(87) }}'
+      name: stacklight_telemetry_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of stacklight telemetry node02
+      initial: mtr02
+      name: stacklight_telemetry_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of stacklight telemetry node03
+      initial: '{{ control_network_subnet | subnet(88) }}'
+      name: stacklight_telemetry_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of stacklight telemetry node03
+      initial: '{{ deploy_network_subnet | subnet(88) }}'
+      name: stacklight_telemetry_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of stacklight telemetry node03
+      initial: mtr03
+      name: stacklight_telemetry_node03_hostname
+      type: TEXT
+      width: half
+    - name: "stacklight_long_term_storage_type"
+      label: "Long Term Storage type"
+      type: "CHOICE"
+      initial: "prometheus"
+      choices:
+        - - "prometheus"
+          - "Prometheus"
+        - - "influxdb"
+          - "InfluxDB"
+    - help_text: Address of the SMTP host (for alert notifications)
+      initial: 127.0.0.1
+      name: oss_pushkin_smtp_host
+      type: TEXT
+    - help_text: Address of the SMTP port (for alert notifications)
+      initial: 587
+      name: oss_pushkin_smtp_port
+      type: TEXT
+    - help_text: Sender-mail password (for alert notifications)
+      initial: password
+      name: oss_pushkin_email_sender_password
+      type: TEXT
+    - help_text: Webhook login id (for alert notifications)
+      initial: 13
+      name: oss_webhook_login_id
+      type: TEXT
+    - help_text: Webhook application id (for alert notifications)
+      initial: 24
+      name: oss_webhook_app_id
+      type: TEXT
+    label: StackLight product parameters
+    name: stacklight
+    doc: |
+      StackLight product parameters
+      =================================
+
+      .. figure:: https://github.com/mceloud/images/blob/master/cookiecutter%20-%20stacklight.png?raw=true
+        :width: 70 %
+        :align: center
+        :alt: StackLight control diagram
+
+    requires:
+    - stacklight_enabled: True
+  - fields:
+    - help_text: IP mask of Ceph backend network
+      hidden: True
+      initial: '{{ backend_network_subnet | netmask }}'
+      name: backend_network_netmask
+      type: IP
+    - help_text: IP address of ceph mon storage node01
+      initial: '{{ control_network_subnet | subnet(66) }}'
+      name: ceph_mon_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of ceph mon storage node01
+      initial: '{{ deploy_network_subnet | subnet(66) }}'
+      name: ceph_mon_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of ceph mon storage node01
+      initial: cmn01
+      name: ceph_mon_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of ceph mon storage node02
+      initial: '{{ control_network_subnet | subnet(67) }}'
+      name: ceph_mon_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of ceph mon storage node02
+      initial: '{{ deploy_network_subnet | subnet(67) }}'
+      name: ceph_mon_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of ceph mon storage node02
+      initial: cmn02
+      name: ceph_mon_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of ceph mon storage node03
+      initial: '{{ control_network_subnet | subnet(68) }}'
+      name: ceph_mon_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of ceph mon storage node03
+      initial: '{{ deploy_network_subnet | subnet(68) }}'
+      name: ceph_mon_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of ceph mon storage node03
+      initial: cmn03
+      name: ceph_mon_node03_hostname
+      type: TEXT
+      width: half
+    - help_text: IP VIP address of ceph rados gateway storage cluster
+      initial: '{{ control_network_subnet | subnet(75) }}'
+      name: ceph_rgw_address
+      type: IP
+      width: half
+    - help_text: hostname of ceph rados gateway storage cluster
+      initial: rgw
+      name: ceph_rgw_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of ceph rados gateway storage node01
+      initial: '{{ control_network_subnet | subnet(76) }}'
+      name: ceph_rgw_node01_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of ceph rados gateway storage node01
+      initial: '{{ deploy_network_subnet | subnet(76) }}'
+      name: ceph_rgw_node01_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of ceph rados gateway storage node01
+      initial: rgw01
+      name: ceph_rgw_node01_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of ceph rados gateway storage node02
+      initial: '{{ control_network_subnet | subnet(77) }}'
+      name: ceph_rgw_node02_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of ceph rados gateway storage node02
+      initial: '{{ deploy_network_subnet | subnet(77) }}'
+      name: ceph_rgw_node02_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of ceph rados gateway storage node02
+      initial: rgw02
+      name: ceph_rgw_node02_hostname
+      type: TEXT
+      width: half
+    - help_text: IP address of ceph rados gateway storage node03
+      initial: '{{ control_network_subnet | subnet(78) }}'
+      name: ceph_rgw_node03_address
+      type: IP
+      width: half
+    - help_text: Deploy IP address of ceph rados gateway storage node03
+      initial: '{{ deploy_network_subnet | subnet(78) }}'
+      name: ceph_rgw_node03_deploy_address
+      type: IP
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - help_text: hostname of ceph rados gateway storage node03
+      initial: rgw03
+      name: ceph_rgw_node03_hostname
+      type: TEXT
+      width: half
+    - help_text: number of OSD hosts
+      initial: '3'
+      name: ceph_osd_node_count
+      type: TEXT
+      width: half
+      requires:
+      - ceph_hyper_converged: False
+    - help_text: number of OSDs
+      initial: '10'
+      name: ceph_osd_count
+      type: TEXT
+      width: half
+    - help_text: OSD rack01 hostname
+      initial: osd
+      name: ceph_osd_rack01_hostname
+      type: TEXT
+      width: half
+      requires:
+      - ceph_hyper_converged: False
+    - help_text: control plane network prefix for ceph OSDs
+      initial: '{{ ".".join(control_network_subnet.split(".")[:3]) }}'
+      name: ceph_osd_rack01_single_subnet
+      type: TEXT
+      width: half
+      requires:
+      - ceph_hyper_converged: False
+    - help_text: cluster network prefix for ceph OSDs - used to replicate OSDs data
+      initial: '{{ ".".join(backend_network_subnet.split(".")[:3]) }}'
+      name: ceph_osd_rack01_backend_subnet
+      type: TEXT
+      width: half
+    - help_text: deploy network prefix for ceph OSDs
+      initial: '{{ ".".join(deploy_network_subnet.split(".")[:3]) }}'
+      name: ceph_osd_rack01_deploy_subnet
+      type: TEXT
+      width: half
+      requires:
+      - static_ips_on_deploy_network_enabled: True
+    - name: "ceph_public_network"
+      type: IP
+      help_text: "IP address of ceph public network with network mask"
+      initial: "{{ control_network_subnet }}"
+      mask: True
+      width: half
+    - name: "ceph_cluster_network"
+      type: IP
+      help_text: "IP address of ceph cluster network with network mask"
+      initial: "{{ backend_network_subnet }}"
+      mask: True
+      width: half
+    - help_text: ceph OSD journal size in GB
+      initial: '20'
+      name: ceph_osd_journal_size
+      type: TEXT
+      width: half
+      requires:
+      - ceph_osd_backend: "filestore"
+    - help_text: ceph OSD block db size in GB
+      initial: '20'
+      name: ceph_osd_block_db_size
+      type: TEXT
+      width: half
+      requires:
+      - ceph_osd_backend: "bluestore"
+    - help_text: Deploy NIC of Ceph OSD nodes on management network
+      initial: eth0
+      name: ceph_osd_deploy_nic
+      type: TEXT
+      width: half
+      requires:
+        - static_ips_on_deploy_network_enabled: True
+    - help_text: First NIC of Ceph OSD bond used for Ceph communication
+      initial: eth1
+      name: ceph_osd_primary_first_nic
+      type: TEXT
+      width: half
+    - help_text: Second NIC of Ceph OSD bond used for Ceph communication
+      initial: eth2
+      name: ceph_osd_primary_second_nic
+      type: TEXT
+      width: half
+    - name: "ceph_osd_bond_mode"
+      help_text: Bond mode for Ceph OSD communication
+      type: "CHOICE"
+      initial: "active-backup"
+      choices:
+        - - "active-backup"
+          - "active-backup"
+        - - "balance-xor"
+          - "balance-xor"
+        - - "broadcast"
+          - "broadcast"
+        - - "802.3ad"
+          - "802.3ad"
+        - - "balance-tlb"
+          - "balance-tlb"
+        - - "balance-alb"
+          - "balance-alb"
+      requires:
+      - deployment_type: physical
+    - help_text: comma separated list of OSD data disks
+      initial: '/dev/vdd,/dev/vde,/dev/vdf'
+      name: ceph_osd_data_disks
+      type: TEXT
+    - help_text: comma separated list of fast disks for journal or block_db
+      initial: '/dev/vdb,/dev/vdc,/dev/vdd'
+      name: ceph_osd_journal_or_block_db_disks
+      type: TEXT
+    label: Ceph product parameters
+    name: ceph
+    doc: |
+      Ceph product parameters
+      ========================
+
+      .. figure:: https://raw.githubusercontent.com/jiribroulik/images/master/ceph-diagram-2-1.png?raw=true
+        :width: 70 %
+        :align: center
+        :alt: Ceph storage diagram
+
+    requires:
+    - ceph_enabled: True
