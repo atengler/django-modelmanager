@@ -3,10 +3,10 @@ import logging
 from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
 from django.views.generic.base import TemplateView
-from formtools.wizard.views import SessionWizardView
 from modelmanager.mixins import LoginRequired
 
 from .forms import ContactForm1, ContactForm2
+from .generic_views import GeneratedWizardView
 
 LOG = logging.getLogger(__name__)
 
@@ -20,8 +20,7 @@ class OverviewView(LoginRequired, TemplateView):
         return ctx
 
 
-class GenerateMetadataWizard(SessionWizardView):
-    form_list = [('contact_form_1', ContactForm1), ('contact_form_2', ContactForm2)]
+class GenerateMetadataWizard(GeneratedWizardView):
     initial_dict = {
         'contact_form_1': {
             'subject': 'test',
